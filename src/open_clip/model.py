@@ -314,7 +314,7 @@ class CLIP(nn.Module):
 
         if self.logit_bias is not None:
             return image_features, text_features, self.logit_scale.exp(), self.logit_bias
-        return image_features, text_features, self.logit_scale.exp()
+        return image_features, text_features, self.logit_scale.exp() # visual transformer output, text transformer output, logit scale
 
 
 class CustomTextCLIP(nn.Module):

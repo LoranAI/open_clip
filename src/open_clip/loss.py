@@ -112,9 +112,10 @@ class ClipLoss(nn.Module):
                 logits_per_image = logit_scale * all_image_features @ all_text_features.T
                 logits_per_text = logits_per_image.T
         else:
-            logits_per_image = logit_scale * image_features @ text_features.T
-            logits_per_text = logit_scale * text_features @ image_features.T
-        
+            logits_per_image = logit_scale * image_features @ text_features.T   # [n, embed_image] @ [n; embed_text] -> [n, n] NOTE: embed_image = embed_text
+            logits_per_text = logit_scale * text_features @ image_features.T    # [n, n]  i-th row is the similarity of the i-th image to all text features
+                                                                                # labels [n: n] torch tensor
+
         return logits_per_image, logits_per_text
 
     def forward(self, image_features, text_features, logit_scale, output_dict=False):
