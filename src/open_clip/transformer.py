@@ -288,7 +288,6 @@ class CustomResidualAttentionBlock(nn.Module):
 def _expand_token(token, batch_size: int):
     return token.view(1, 1, -1).expand(batch_size, -1, -1)
 
-
 class Transformer(nn.Module):
     def __init__(
             self,
@@ -545,7 +544,6 @@ class VisionTransformer(nn.Module):
             return pooled, tokens
         
         return pooled
-
 
 def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'argmax'):
     if pool_type == 'first':
@@ -893,9 +891,53 @@ class PolytopeTransformer(Transformer):
         super().__init__()
         self.n_classes = n_classes
         self.symplex_type = symplex_type
-        self.symplex = Symplex(self.width, self.width, self.n_classes, self.symplex_type)
         
-    def forward(self, x):
-        x = super().forward(x)
-        return self.symplex(x)
+        if symplex_type == 'd-symplex':
+            self.out_features  = self.n_classes - 1
+        if symplex_type == 'd-ortoplex':
+            self.out_features = torch.ceil(torch.tensor(self.n_classes/2)).int()
+        if symplex_type == 'd-cube':
+            self.out_features = torch.ceil(torch.log2(torch.tensor(self.n_classes))).int()
+        
+        self.symplex = Symplex(self.width, self.out_features, self.n_classes, self.symplex_type)
+        
+    def forward(self, x: torch.Tensorm, attn_mask: Optional[torch.Tensor] = None):
+        x = super().forward(x, attn_mask)
+        x = self.symplex(x) #NOTE: check for attention mask usage.
+        return x
     
+class PolytopeVisionTransformer(VisionTransformer):
+    """
+    PolytopeVisionTransformer is a vision transformer model that uses a symplex layer after the transformer
+    """
+    def __init__(self, 
+                 n_classes: int,
+                 symplex_type: str = 'd-symplex',
+    ):
+        super().__init__()
+        self.transformer = PolytopeTransformer(n_classes, symplex_type)
+        
+    def forward(self, x: torch.Tensor):
+        return super().forward(x)
+    
+class PolytopeTextTransformer(TextTransformer):
+    """
+    PolytopeVisionTransformer is a vision transformer model that uses a symplex layer after the transformer
+    """
+    def __init__(self, 
+                 n_classes: int,
+                 symplex_type: str = 'd-symplex',
+    ):
+        super().__init__()
+        self.transformer = PolytopeTransformer(n_classes, symplex_type)
+        
+    def forward(self, x: torch.Tensor):
+        return super().forward(x)
+    
+
+   
+    
+    
+        
+        
+        
