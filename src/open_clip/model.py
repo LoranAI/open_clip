@@ -299,7 +299,6 @@ def _build_poly_vision_tower(
 
     return visual
 
-
 def _build_text_tower(
         embed_dim: int,
         text_cfg: CLIPTextCfg,

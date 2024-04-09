@@ -705,7 +705,6 @@ class TextTransformer(nn.Module):
 
         return pooled
 
-
 class MultimodalTransformer(Transformer):
     def __init__(
             self,

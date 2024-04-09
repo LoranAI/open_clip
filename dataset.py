@@ -2,7 +2,8 @@ import torch.utils.data as data
 from PIL import Image
 import os
 import os.path
-
+import pandas as pd
+from pycocotools.coco import COCO
 
 class CocoCaptions(data.Dataset):
     """`MS Coco Captions Dataset.
@@ -42,10 +43,9 @@ class CocoCaptions(data.Dataset):
             u'A mountain view with a plume of smoke in the background']
 
     """
-    def __init__(self, root, annFile, transform=None, target_transform=None):
-        from pycocotools.coco import COCO
+    def __init__(self, root, annotation_path, transform=None, target_transform=None):
         self.root = os.path.expanduser(root)
-        self.coco = COCO(annFile)
+        self.coco = COCO(annotation_path)
         self.ids = list(self.coco.imgs.keys())
         self.transform = transform
         self.target_transform = target_transform
@@ -65,7 +65,7 @@ class CocoCaptions(data.Dataset):
         target = [ann['caption'] for ann in anns]
 
         path = coco.loadImgs(img_id)[0]['file_name']
-
+        print(path)
         img = Image.open(os.path.join(self.root, path)).convert('RGB')
         if self.transform is not None:
             img = self.transform(img)
@@ -77,3 +77,27 @@ class CocoCaptions(data.Dataset):
 
     def __len__(self):
         return len(self.ids)
+    
+if __name__ == "__main__":
+    """
+    Note that the Dataset class is not used since the open_clip API wants a single csv file.
+    The creation of the csv file is done here.
+    """
+    
+    root = "/andromeda/datasets/COCO2017/COCO2017_train/train2017"
+    path = "/andromeda/datasets/COCO2017/COCO2017_train/annotations/captions_train2017.json"
+    
+    coco = COCO(path)
+    ids = list(coco.imgs.keys())
+    imgs = coco.loadImgs(coco.getImgIds())
+    future_df = {"filepath":[], "title":[]}
+    for img, id in zip(imgs, ids):
+        ann_ids = coco.getAnnIds(imgIds=id, iscrowd=None)
+        anns = coco.loadAnns(ann_ids)
+        for ann in anns:
+            future_df["filepath"].append(img["file_name"])
+            future_df["title"].append(ann["caption"])
+
+    pd.DataFrame.from_dict(future_df).to_csv(
+        os.path.join(root, "train2017.csv"), index=False, sep="\t"
+    )
