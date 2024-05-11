@@ -15,5 +15,6 @@ report-to: "wandb"
 coca-contrastive-loss-weight: 0
 coca-caption-loss-weight: 1
 log-every-n-steps: 100
+wandb_project_name: "CLIP"
 
 

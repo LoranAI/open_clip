@@ -452,6 +452,10 @@ def parse_args(args):
         action="store_true",
         help='Use SigLip (sigmoid) loss.'
     )
+    parser.add_argument(
+        "--aro-datasets-path",
+        help='List of paths of the datasets used for validation.'
+    )
 
     args = parser.parse_args(args)
 

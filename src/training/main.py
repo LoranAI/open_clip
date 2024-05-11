@@ -6,7 +6,6 @@ import subprocess
 import sys
 import random
 from datetime import datetime
-from functools import partial
 
 import numpy as np
 import torch
@@ -34,7 +33,7 @@ from training.distributed import is_master, init_distributed_device, broadcast_o
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, evaluate
+from training.train import train_one_epoch, evaluate, evaluate_ARO
 from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
 
@@ -52,7 +51,7 @@ def natural_key(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_.lower())]
 
 
-def get_latest_checkpoint(path: str, remote : bool):
+def get_latest_checkpoint(path: str, remote: bool):
     # as writen, this glob recurses, so can pick up checkpoints across multiple sub-folders
     if remote:
         result = subprocess.run(["aws", "s3", "ls", path + "/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -361,7 +360,7 @@ def main(args):
         tokenizer=tokenizer,
     )
     assert len(data), 'At least one train or eval dataset must be specified.'
-
+    
     # create scheduler if train
     scheduler = None
     if 'train' in data and optimizer is not None:
@@ -388,6 +387,7 @@ def main(args):
     if args.save_logs and args.tensorboard:
         assert tensorboard is not None, "Please install tensorboard."
         writer = tensorboard.SummaryWriter(args.tensorboard_path)
+        
 
     if args.wandb and is_master(args):
         assert wandb is not None, 'Please install wandb.'
@@ -399,6 +399,8 @@ def main(args):
         wandb.init(
             project=args.wandb_project_name,
             name=args.name,
+            # FIXME entity for your wandb account
+            entity='Bardas',
             id=args.name,
             notes=args.wandb_notes,
             tags=[],
@@ -418,13 +420,17 @@ def main(args):
         logging.info('Compiling model...')
         model = torch.compile(original_model)
 
+    # FIXME evaluate before training
+    # Evaluate before training to visualize the model's performance before training.
+    # evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
+
+    if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
+        logging.info("evaluating zero-shot")
+        evaluate(model, data, start_epoch, args, writer)
+    if any(v in data for v in ('aro_eval',)):
+        logging.info("evaluating aro datasets")
+        evaluate_ARO(model, data, get_tokenizer(args.model), start_epoch, args, writer)
     if 'train' not in data:
-        # If using int8, convert to inference mode.
-        if args.use_bnb_linear is not None:
-            from open_clip.utils import convert_int8_model_to_inference_mode
-            convert_int8_model_to_inference_mode(model)
-        # Evaluate.
-        evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
         return
 
     loss = create_loss(args)
