@@ -1,6 +1,6 @@
-model: 'ViT-B-32'
-pretrained: 'openai'
+model: ViT-B-32
+pretrained: openai
 aro-datasets-path: /equilibrium/datasets/aro_datasets
-# val-data: "../datasets/val2017.csv"
+val-data: ./datasets/val2017.csv
 imagenet-val: /home/DATASETS/ImageNet/val
 imagenet-v2: /home/DATASETS/ImageNet

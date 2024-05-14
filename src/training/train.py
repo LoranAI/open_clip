@@ -211,7 +211,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
             logit_scale_scalar = logit_scale.item()
             loss_log = " ".join(
                 [
-                    f"{loss_name.capitalize()}: {loss_m.val:#.5g} ({loss_m.avg:#.5g})" 
+                    f"{loss_name.capitalize()}: {loss_m.val:#.5g} ({loss_m.avg:#.5g})"
                     for loss_name, loss_m in losses_m.items()
                 ]
             )
@@ -233,7 +233,7 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
                 "samples_per_second_per_gpu": samples_per_second_per_gpu,
                 "scale": logit_scale_scalar,
                 "lr": optimizer.param_groups[0]["lr"]
-            }            
+            }
             log_data.update({name: val.val for name, val in losses_m.items()})
 
             log_data = {"train/" + name: val for name, val in log_data.items()}
@@ -241,12 +241,12 @@ def train_one_epoch(model, data, loss, epoch, optimizer, scaler, scheduler, dist
             if tb_writer is not None:
                 for name, val in log_data.items():
                     tb_writer.add_scalar(name, val, step)
-            
+
             if args.wandb:
                 assert wandb is not None, 'Please install wandb.'
                 log_data['step'] = step  # for backwards compatibility
                 wandb.log(log_data, step=step)
-            
+
             # resetting batch / data time meters per log window
             batch_time_m.reset()
             data_time_m.reset()
@@ -299,9 +299,9 @@ def evaluate(model, data, epoch, args, tb_writer=None, tokenizer=None):
                     batch_size = images.shape[0]
                     labels = torch.arange(batch_size, device=device).long()
                     total_loss = (
-                        F.cross_entropy(logits_per_image, labels) +
-                        F.cross_entropy(logits_per_text, labels)
-                    ) / 2
+                                         F.cross_entropy(logits_per_image, labels) +
+                                         F.cross_entropy(logits_per_text, labels)
+                                 ) / 2
 
                     gen_loss = maybe_compute_generative_loss(model_out)
 
@@ -362,37 +362,63 @@ def evaluate(model, data, epoch, args, tb_writer=None, tokenizer=None):
 
     return metrics
 
+
 def evaluate_ARO(model, data, tokenizer, epoch, args, tb_writer=None):
     metrics = {}
     if not is_master(args):
         return metrics
     device = torch.device(args.device)
     model.eval()
-    
+
     for dataset_name, dataset in data["aro_eval"].items():
-        all_scores = get_retrieval_scores_batched(model, 
-                                                  dataset, 
-                                                  tokenizer, 
-                                                  args.batch_size, 
+        all_scores = get_retrieval_scores_batched(model,
+                                                  dataset,
+                                                  tokenizer,
+                                                  args.batch_size,
                                                   args.workers,
                                                   device)
         scores = dataset.evaluate_scores(all_scores)
-        
+
         if dataset_name in ['coco_order', 'flickr30k_order']:
             metric_name = 'Precision@1'
             accuracy = scores[0][metric_name]
         else:
-            symmetric = ['adjusting', 'attached to', 'between', 'bigger than', 'biting', 'boarding', 'brushing', 'chewing', 'cleaning', 'climbing', 'close to', 'coming from', 'coming out of', 'contain', 'crossing', 'dragging', 'draped over', 'drinking', 'drinking from', 'driving', 'driving down', 'driving on', 'eating from', 'eating in', 'enclosing', 'exiting', 'facing', 'filled with', 'floating in', 'floating on', 'flying', 'flying above', 'flying in', 'flying over', 'flying through', 'full of', 'going down', 'going into', 'going through', 'grazing in', 'growing in', 'growing on', 'guiding', 'hanging from', 'hanging in', 'hanging off', 'hanging over', 'higher than', 'holding onto', 'hugging', 'in between', 'jumping off', 'jumping on', 'jumping over', 'kept in', 'larger than', 'leading', 'leaning over', 'leaving', 'licking', 'longer than', 'looking in', 'looking into', 'looking out', 'looking over', 'looking through', 'lying next to', 'lying on top of', 'making', 'mixed with', 'mounted on', 'moving', 'on the back of', 'on the edge of', 'on the front of', 'on the other side of', 'opening', 'painted on', 'parked at', 'parked beside', 'parked by', 'parked in', 'parked in front of', 'parked near', 'parked next to', 'perched on', 'petting', 'piled on', 'playing', 'playing in', 'playing on', 'playing with', 'pouring', 'reaching for', 'reading', 'reflected on', 'riding on', 'running in', 'running on', 'running through', 'seen through', 'sitting behind', 'sitting beside', 'sitting by', 'sitting in front of', 'sitting near', 'sitting next to', 'sitting under', 'skiing down', 'skiing on', 'sleeping in', 'sleeping on', 'smiling at', 'sniffing', 'splashing', 'sprinkled on', 'stacked on', 'standing against', 'standing around', 'standing behind', 'standing beside', 'standing in front of', 'standing near', 'standing next to', 'staring at', 'stuck in', 'surrounding', 'swimming in', 'swinging', 'talking to', 'topped with', 'touching', 'traveling down', 'traveling on', 'tying', 'typing on', 'underneath', 'wading in', 'waiting for', 'walking across', 'walking by', 'walking down', 'walking next to', 'walking through', 'working in', 'working on', 'worn on', 'wrapped around', 'wrapped in', 'by', 'of', 'near', 'next to', 'with', 'beside', 'on the side of', 'around']
+            symmetric = ['adjusting', 'attached to', 'between', 'bigger than', 'biting', 'boarding', 'brushing',
+                         'chewing', 'cleaning', 'climbing', 'close to', 'coming from', 'coming out of', 'contain',
+                         'crossing', 'dragging', 'draped over', 'drinking', 'drinking from', 'driving', 'driving down',
+                         'driving on', 'eating from', 'eating in', 'enclosing', 'exiting', 'facing', 'filled with',
+                         'floating in', 'floating on', 'flying', 'flying above', 'flying in', 'flying over',
+                         'flying through', 'full of', 'going down', 'going into', 'going through', 'grazing in',
+                         'growing in', 'growing on', 'guiding', 'hanging from', 'hanging in', 'hanging off',
+                         'hanging over', 'higher than', 'holding onto', 'hugging', 'in between', 'jumping off',
+                         'jumping on', 'jumping over', 'kept in', 'larger than', 'leading', 'leaning over', 'leaving',
+                         'licking', 'longer than', 'looking in', 'looking into', 'looking out', 'looking over',
+                         'looking through', 'lying next to', 'lying on top of', 'making', 'mixed with', 'mounted on',
+                         'moving', 'on the back of', 'on the edge of', 'on the front of', 'on the other side of',
+                         'opening', 'painted on', 'parked at', 'parked beside', 'parked by', 'parked in',
+                         'parked in front of', 'parked near', 'parked next to', 'perched on', 'petting', 'piled on',
+                         'playing', 'playing in', 'playing on', 'playing with', 'pouring', 'reaching for', 'reading',
+                         'reflected on', 'riding on', 'running in', 'running on', 'running through', 'seen through',
+                         'sitting behind', 'sitting beside', 'sitting by', 'sitting in front of', 'sitting near',
+                         'sitting next to', 'sitting under', 'skiing down', 'skiing on', 'sleeping in', 'sleeping on',
+                         'smiling at', 'sniffing', 'splashing', 'sprinkled on', 'stacked on', 'standing against',
+                         'standing around', 'standing behind', 'standing beside', 'standing in front of',
+                         'standing near', 'standing next to', 'staring at', 'stuck in', 'surrounding', 'swimming in',
+                         'swinging', 'talking to', 'topped with', 'touching', 'traveling down', 'traveling on', 'tying',
+                         'typing on', 'underneath', 'wading in', 'waiting for', 'walking across', 'walking by',
+                         'walking down', 'walking next to', 'walking through', 'working in', 'working on', 'worn on',
+                         'wrapped around', 'wrapped in', 'by', 'of', 'near', 'next to', 'with', 'beside',
+                         'on the side of', 'around']
             df = pd.DataFrame(scores)
-            if dataset_name == "vg_relation": 
+            if dataset_name == "vg_relation":
                 df = df[~df.Relation.isin(symmetric)]
             elif dataset_name == "vg_attributes":
                 df = df[~df.Attributes.isin(symmetric)]
-            df = df[df["Count"] > 9]    # removing those with less than 9 counts
+            df = df[df["Count"] > 9]  # removing those with less than 9 counts
             accuracy = df.Accuracy.mean()
             metric_name = 'Macro Accuracy'
 
-        logging.info(f"Eval Epoch {epoch-1}: {dataset_name} accuracy: {accuracy:.4f}")    
+        logging.info(f"Eval Epoch {epoch - 1}: {dataset_name} accuracy: {accuracy:.4f}")
         if args.wandb:
             assert wandb is not None, 'Please install wandb.'
             wandb.log({f"val/{dataset_name}-{metric_name}": accuracy, 'epoch': epoch})
@@ -424,14 +450,15 @@ def maybe_compute_generative_loss(model_out):
         token_labels = model_out["labels"]
         return F.cross_entropy(token_logits.permute(0, 2, 1), token_labels)
 
+
 @torch.no_grad()
-def get_retrieval_scores_batched(model, # assuming to have a CLIPModel
-                                 dataset, 
+def get_retrieval_scores_batched(model,  # assuming to have a CLIPModel
+                                 dataset,
                                  tokenizer,
-                                 batch_size=128, 
-                                 num_workers=4, 
+                                 batch_size=128,
+                                 num_workers=4,
                                  device="cuda"
-                                ):
+                                 ):
     """
     from https://github.com/mertyg/vision-language-models-are-bows/blob/main/model_zoo/clip_models.py#L55
     Computes the scores for each image_option / caption_option pair in the joint loader.
@@ -473,3 +500,93 @@ def get_retrieval_scores_batched(model, # assuming to have a CLIPModel
 
     all_scores = np.concatenate(scores, axis=0)  # N x K x L
     return all_scores
+
+
+# FIXME Check if working
+def evaluate_VAL(model, data, tokenizer, epoch, args, tb_writer=None):
+    metrics = {}
+    if not is_master(args):
+        return metrics
+    device = torch.device(args.device)
+    model.eval()
+
+    dataset = data["val"]
+    all_scores = get_retrieval_scores_batched_VAL(model,
+                                                  dataset,
+                                                  device)
+    scores = evaluate_scores_VAL(all_scores)
+
+    metric_name = 'Precision@1'
+    accuracy = scores[0][metric_name]
+
+    logging.info(f"Eval Epoch {epoch - 1}: accuracy: {accuracy:.4f}")
+    if args.wandb:
+        assert wandb is not None, 'Please install wandb.'
+        wandb.log({f"val/{metric_name}": accuracy, 'epoch': epoch})
+
+
+@torch.no_grad()
+def get_retrieval_scores_batched_VAL(model,  # assuming to have a CLIPModel
+                                     dataset,
+                                     device="cuda"
+                                     ):
+    """
+    from https://github.com/mertyg/vision-language-models-are-bows/blob/main/model_zoo/clip_models.py#L55
+    Computes the scores for each image_option / caption_option pair in the joint loader.
+
+    Args:
+        joint_loader (DataLoader): batches have "image_options" and "caption_options" fields.
+        "image_options" is a list of images, and "caption_options" is a list of captions.
+
+    Returns:
+        all_scores: A numpy array containing the scores of the shape NxKxL,
+        where N is the number of test cases, K is the number of image options per the test case,
+        and L is the number of caption options per the test case.
+    """
+    scores = []
+    data_loader = dataset.dataloader
+    tqdm_loader = tqdm(data_loader)
+    tqdm_loader.set_description("Computing retrieval scores")
+    for batch in tqdm_loader:
+        image_options = []
+        i_option = batch[0]
+        # i_option = torch.cat(i_option.pixel_values)
+        # i_option = torch.cat(i_option)
+        image_embeddings = model.encode_image(i_option.to(device)).cpu().numpy()  # B x D
+        image_embeddings = image_embeddings / np.linalg.norm(image_embeddings, axis=1, keepdims=True)  # B x D
+        image_options.append(np.expand_dims(image_embeddings, axis=1))
+
+        caption_options = []
+        c_option = batch[1]
+        # caption_tokenized = torch.cat([clip.tokenize(c) for c in c_option])
+        caption_tokenized = c_option
+        caption_embeddings = model.encode_text(caption_tokenized.to(device)).cpu().numpy()  # B x D
+        caption_embeddings = caption_embeddings / np.linalg.norm(caption_embeddings, axis=1, keepdims=True)  # B x D
+        caption_options.append(np.expand_dims(caption_embeddings, axis=1))
+
+        image_options = np.concatenate(image_options, axis=1)  # B x K x D
+        caption_options = np.concatenate(caption_options, axis=1)  # B x L x D
+        batch_scores = np.einsum("nkd,nld->nkl", image_options, caption_options)  # B x K x L
+        scores.append(batch_scores)
+
+    all_scores = np.concatenate(scores, axis=0)  # N x K x L
+    return all_scores
+
+
+def evaluate_scores_VAL(scores):
+
+    if isinstance(scores, tuple):
+        scores_i2t = scores[0]
+        scores_t2i = scores[1].T  # Make it N_ims x N_text
+
+    else:
+        scores_t2i = scores
+        scores_i2t = scores
+
+    preds = np.argmax(np.squeeze(scores_i2t, axis=1), axis=-1)
+    correct_mask = (preds == 0)
+    records = [{"Precision@1": np.mean(correct_mask)}]
+    for k in [1, 5, 10]:
+        stringss = f"RECALL@{k}: {np.mean(preds < k)}"
+        print(stringss)
+    return records

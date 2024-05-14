@@ -22,8 +22,7 @@ from torch.utils.data.distributed import DistributedSampler
 from webdataset.filters import _shuffle
 from webdataset.tariterators import base_plus_ext, url_opener, tar_file_expander, valid_sample
 
-from datasets.aro_datasets.aro_datasets import VG_Relation, VG_Attribution, COCO_Order, Flickr30k_Order
-
+from datasets.aro_datasets.aro_datasets import VG_Relation, VG_Attribution, COCO_Order, Flickr30k_Order, COCO2017
 
 try:
     import horovod.torch as hvd
@@ -553,20 +552,23 @@ def get_aro_datasets(aro_datasets_path, preprocess_val):
     nltk.download('punkt')
     
     aro_datasets_path = Path(aro_datasets_path)
+
     datasets = {}
 
-    datasets['vg_relation'] = VG_Relation(image_preprocess=preprocess_val, download=False,
-                                          root_dir=aro_datasets_path / 'vg_relation')
-    datasets['vg_attribution'] = VG_Attribution(image_preprocess=preprocess_val, download=False,
-                                                root_dir=aro_datasets_path / 'vg_attribution')
-    datasets['coco_order'] = COCO_Order(image_preprocess=preprocess_val, download=False,
-                                        split='val', root_dir=aro_datasets_path / 'coco_order')
-    datasets['flickr30k_order'] = Flickr30k_Order(image_preprocess=preprocess_val, download=False,
-                                                  split='val', root_dir=aro_datasets_path / 'flickr30k_order')
+    # datasets['vg_relation'] = VG_Relation(image_preprocess=preprocess_val, download=False, root_dir=aro_datasets_path / 'vg_relation')
+
+    # datasets['vg_attribution'] = VG_Attribution(image_preprocess=preprocess_val, download=False, root_dir=aro_datasets_path / 'vg_attribution')
+
+    datasets['coco_order'] = COCO_Order(image_preprocess=preprocess_val, download=False, split='val', root_dir=aro_datasets_path / 'coco_order')
+
+    # datasets['flickr30k_order'] = Flickr30k_Order(image_preprocess=preprocess_val, download=False, split='val', root_dir=aro_datasets_path / 'flickr30k_order')
+
+    # coco2017dir = "/andromeda/datasets/COCO2017/COCO2017_val/val2017"
+    # datasets['coco2017'] = COCO2017(image_preprocess=preprocess_val, split='val', root_dir=coco2017dir)
+
     print('ARO datasets loaded')
     return datasets
     
-
 
 def get_data(args, preprocess_fns, epoch=0, tokenizer=None):
     preprocess_train, preprocess_val = preprocess_fns
@@ -578,6 +580,7 @@ def get_data(args, preprocess_fns, epoch=0, tokenizer=None):
     if args.val_data:
         data["val"] = get_dataset_fn(args.val_data, args.dataset_type)(
             args, preprocess_val, is_train=False, tokenizer=tokenizer)
+
     if args.aro_datasets_path:
         data["aro_eval"] = get_aro_datasets(args.aro_datasets_path, preprocess_val)
 
