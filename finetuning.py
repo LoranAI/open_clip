@@ -1,9 +1,8 @@
-import torch
-from PIL import Image
-from open_clip import create_model_and_transforms
-from training import main, parse_args
-import argparse
 import yaml
+
+from training.main import main
+from training.utils import hyperparameters_eval_path, hyperparameters_path
+
 
 def convert_yaml_to_argv(yaml_dict):
     """
@@ -16,17 +15,17 @@ def convert_yaml_to_argv(yaml_dict):
         argv.append(f'{value}')
     return argv
 
-def finetune():
-    # Load the configuration file
-    with open('hyperparam.yaml') as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
 
-    args = convert_yaml_to_argv(config)
-    
-    main(args)
-    
 if __name__ == '__main__':
-    model = create_model_and_transforms('ViT-B-32')
-    print(model)
+    # Load the configuration file
+    eval = hyperparameters_eval_path
+    train = hyperparameters_path
+
+    with open(eval) as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+    args = convert_yaml_to_argv(config)
+
+    main(args)
+
 
 

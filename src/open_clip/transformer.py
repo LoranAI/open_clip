@@ -705,6 +705,7 @@ class TextTransformer(nn.Module):
 
         return pooled
 
+
 class MultimodalTransformer(Transformer):
     def __init__(
             self,
@@ -798,7 +799,8 @@ class MultimodalTransformer(Transformer):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         self.grad_checkpointing = enable
-        
+
+
 class Symplex(nn.Module):
     """
     Symplex layer following the https://arxiv.org/abs/2103.15632 paper
@@ -879,6 +881,7 @@ class Symplex(nn.Module):
         vec = vec / torch.norm(vec, p=2, dim=1, keepdim=True)
         return vec
 
+
 class PolytopeTransformer(Transformer):
     """
     PolytopeTransformer is a transformer model that uses a symplex layer after the transformer
@@ -900,11 +903,12 @@ class PolytopeTransformer(Transformer):
         
         self.symplex = Symplex(self.width, self.out_features, self.n_classes, self.symplex_type)
         
-    def forward(self, x: torch.Tensorm, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         x = super().forward(x, attn_mask)
-        x = self.symplex(x) #NOTE: check for attention mask usage.
+        x = self.symplex(x)  # NOTE: check for attention mask usage.
         return x
-    
+
+
 class PolytopeVisionTransformer(VisionTransformer):
     """
     PolytopeVisionTransformer is a vision transformer model that uses a symplex layer after the transformer

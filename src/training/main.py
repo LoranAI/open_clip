@@ -387,7 +387,6 @@ def main(args):
     if args.save_logs and args.tensorboard:
         assert tensorboard is not None, "Please install tensorboard."
         writer = tensorboard.SummaryWriter(args.tensorboard_path)
-        
 
     if args.wandb and is_master(args):
         assert wandb is not None, 'Please install wandb.'
