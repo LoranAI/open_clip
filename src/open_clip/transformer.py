@@ -288,7 +288,6 @@ class CustomResidualAttentionBlock(nn.Module):
 def _expand_token(token, batch_size: int):
     return token.view(1, 1, -1).expand(batch_size, -1, -1)
 
-
 class Transformer(nn.Module):
     def __init__(
             self,
@@ -324,7 +323,6 @@ class Transformer(nn.Module):
             else:
                 x = r(x, attn_mask=attn_mask)
         return x
-
 
 class VisionTransformer(nn.Module):
     output_tokens: torch.jit.Final[bool]
@@ -547,7 +545,6 @@ class VisionTransformer(nn.Module):
         
         return pooled
 
-
 def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'argmax'):
     if pool_type == 'first':
         pooled, tokens = x[:, 0], x[:, 1:]
@@ -708,7 +705,6 @@ class TextTransformer(nn.Module):
 
         return pooled
 
-
 class MultimodalTransformer(Transformer):
     def __init__(
             self,
@@ -802,9 +798,8 @@ class MultimodalTransformer(Transformer):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         self.grad_checkpointing = enable
-
-
-class Symplex(nn.Module):
+        
+class Simplex(nn.Module):
     """
     Symplex layer following the https://arxiv.org/abs/2103.15632 paper
     
@@ -884,67 +879,236 @@ class Symplex(nn.Module):
         vec = vec / torch.norm(vec, p=2, dim=1, keepdim=True)
         return vec
 
-
 class PolytopeTransformer(Transformer):
     """
-    PolytopeTransformer is a transformer model that uses a symplex layer after the transformer
+    PolytopeTransformer is a transformer model that uses a simplex layer after the transformer
     """
-    def __init__(self, 
-                 n_classes: int,
-                 symplex_type: str = 'd-symplex',
+
+    def _init_(
+            self,
+            width: int,
+            layers: int,
+            heads: int,
+            n_classes: int,
+            mlp_ratio: float = 4.0,
+            ls_init_value: float = None,
+            act_layer: Callable = nn.GELU,
+            norm_layer: Callable = LayerNorm,
+            simplex_type: str = "d_simplex_type",
     ):
-        super().__init__()
+        """
+        Initialize the PolytopeTransformer model
+
+        :param width: int:
+        :param layers: int:
+        :param heads: int:
+        :param n_classes: int: new attribute for the number of classes
+        :param mlp_ratio: float:
+        :param ls_init_value: float:
+        :param act_layer: Callable:
+        :param norm_layer: Callable:
+        :param simplex_type: str: new attribute for the simplex type
+        """
+
+        super()._init_(
+            width=width,
+            layers=layers,
+            heads=heads,
+            mlp_ratio=mlp_ratio,
+            ls_init_value=ls_init_value,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
+        )
         self.n_classes = n_classes
-        self.symplex_type = symplex_type
-        
-        if symplex_type == 'd-symplex':
-            self.out_features  = self.n_classes - 1
-        if symplex_type == 'd-ortoplex':
-            self.out_features = torch.ceil(torch.tensor(self.n_classes/2)).int()
-        if symplex_type == 'd-cube':
+        self.simplex_type = simplex_type
+
+        if simplex_type == "d_simplex_type":
+            self.out_features = self.n_classes - 1
+        if simplex_type == "d_orthoplex_type":
+            self.out_features = torch.ceil(torch.tensor(self.n_classes / 2)).int()
+        if simplex_type == "d_cube_type":
             self.out_features = torch.ceil(torch.log2(torch.tensor(self.n_classes))).int()
-        
-        self.symplex = Symplex(self.width, self.out_features, self.n_classes, self.symplex_type)
-        
+
+        self.simplex = Simplex(self.width, self.out_features, self.n_classes, self.simplex_type)
+
     def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         x = super().forward(x, attn_mask)
-        x = self.symplex(x)  # NOTE: check for attention mask usage.
+        x = self.simplex(x)  # NOTE: check for attention mask usage.
         return x
-
-
+    
 class PolytopeVisionTransformer(VisionTransformer):
     """
-    PolytopeVisionTransformer is a vision transformer model that uses a symplex layer after the transformer
+    PolytopeVisionTransformer is a vision transformer model that uses a simplex layer after the transformer
     """
-    def __init__(self, 
-                 n_classes: int,
-                 symplex_type: str = 'd-symplex',
+
+    def _init_(
+            self,
+            image_size: int,
+            patch_size: int,
+            width: int,
+            layers: int,
+            heads: int,
+            mlp_ratio: float,
+            n_classes: int,
+            ls_init_value: float = None,
+            attentional_pool: bool = False,
+            attn_pooler_queries: int = 256,
+            attn_pooler_heads: int = 8,
+            output_dim: int = 512,
+            patch_dropout: float = 0.,
+            no_ln_pre: bool = False,
+            pos_embed_type: str = 'learnable',
+            pool_type: str = 'tok',
+            final_ln_after_pool: bool = False,
+            act_layer: Callable = nn.GELU,
+            norm_layer: Callable = LayerNorm,
+            output_tokens: bool = False,
+            simplex_type: str = "d_simplex_type",
     ):
-        super().__init__()
-        self.transformer = PolytopeTransformer(n_classes, symplex_type)
+        """
+        Initialize the PolytopeVisionTransformer model
+
+        :param image_size: int:
+        :param patch_size: int:
+        :param width: int:
+        :param layers: int:
+        :param heads: int:
+        :param mlp_ratio: float:
+        :param n_classes: int: new attribute for the number of classes
+        :param ls_init_value: float:
+        :param attentional_pool: bool:
+        :param attn_pooler_queries: int:
+        :param attn_pooler_heads: int:
+        :param output_dim: int:
+        :param patch_dropout: float:
+        :param no_ln_pre: bool:
+        :param pos_embed_type: str:
+        :param pool_type: str:
+        :param final_ln_after_pool: bool:
+        :param act_layer: Callable:
+        :param norm_layer: Callable:
+        :param output_tokens: bool:
+        :param simplex_type: str: new attribute for the simplex type
+        
+        """
+
+        super()._init_(
+            image_size=image_size,
+            patch_size=patch_size,
+            width=width,
+            layers=layers,
+            heads=heads,
+            mlp_ratio=mlp_ratio,
+            ls_init_value=ls_init_value,
+            attentional_pool=attentional_pool,
+            attn_pooler_queries=attn_pooler_queries,
+            attn_pooler_heads=attn_pooler_heads,
+            output_dim=output_dim,
+            patch_dropout=patch_dropout,
+            no_ln_pre=no_ln_pre,
+            pos_embed_type=pos_embed_type,
+            pool_type=pool_type,
+            final_ln_after_pool=final_ln_after_pool,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
+            output_tokens=output_tokens,
+        )
+        self.transformer = PolytopeTransformer(
+            width=self.width,
+            layers=self.layers,
+            heads=self.heads,
+            n_classes=n_classes,
+            mlp_ratio=self.mlp_ratio,
+            ls_init_value=self.ls_init_value,
+            act_layer=self.act_layer,
+            norm_layer=self.norm_layer,
+            simplex_type=simplex_type,
+        )
         
     def forward(self, x: torch.Tensor):
         return super().forward(x)
-
     
 class PolytopeTextTransformer(TextTransformer):
     """
-    PolytopeVisionTransformer is a vision transformer model that uses a symplex layer after the transformer
+    PolytopeVisionTransformer is a vision transformer model that uses a simplex layer after the transformer
     """
-    def __init__(self, 
-                 n_classes: int,
-                 symplex_type: str = 'd-symplex',
+
+    def _init_(
+            self,
+            n_classes: int,
+            simplex_type: str = "d_simplex_type",
+            context_length: int = 77,
+            vocab_size: int = 49408,
+            width: int = 512,
+            heads: int = 8,
+            layers: int = 12,
+            mlp_ratio: float = 4.0,
+            ls_init_value: float = None,
+            output_dim: int = 512,
+            embed_cls: bool = False,
+            no_causal_mask: bool = False,
+            pad_id: int = 0,
+            pool_type: str = 'argmax',
+            proj_bias: bool = False,
+            act_layer: Callable = nn.GELU,
+            norm_layer: Callable = LayerNorm,
+            output_tokens: bool = False,
     ):
-        super().__init__()
-        self.transformer = PolytopeTransformer(n_classes, symplex_type)
+        """
+        Initialize the PolytopeTextTransformer model
+
+        :param n_classes: int: new attribute for the number of classes
+        :param simplex_type: str: new attribute for the simplex type
+        :param context_length: int:
+        :param vocab_size: int:
+        :param width: int:
+        :param heads: int:
+        :param layers: int:
+        :param mlp_ratio: float:
+        :param ls_init_value: float:
+        :param output_dim: int:
+        :param embed_cls: bool:
+        :param no_causal_mask: bool:
+        :param pad_id: int:
+        :param pool_type: str:
+        :param proj_bias: bool:
+        :param act_layer: Callable:
+        :param norm_layer: Callable:
+        :param output_tokens: bool:
+        """
+
+        super()._init_(
+            context_length=context_length,
+            vocab_size=vocab_size,
+            width=width,
+            heads=heads,
+            layers=layers,
+            mlp_ratio=mlp_ratio,
+            ls_init_value=ls_init_value,
+            output_dim=output_dim,
+            embed_cls=embed_cls,
+            no_causal_mask=no_causal_mask,
+            pad_id=pad_id,
+            pool_type=pool_type,
+            proj_bias=proj_bias,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
+            output_tokens=output_tokens,
+        )
+        self.transformer = PolytopeTransformer(
+            width=self.width,
+            layers=self.layers,
+            heads=self.heads,
+            n_classes=n_classes,
+            mlp_ratio=self.mlp_ratio,
+            ls_init_value=self.ls_init_value,
+            act_layer=self.act_layer,
+            norm_layer=self.norm_layer,
+            simplex_type=simplex_type,
+        )
         
     def forward(self, x: torch.Tensor):
         return super().forward(x)
     
 
-   
-    
-    
-        
-        
-        
+
