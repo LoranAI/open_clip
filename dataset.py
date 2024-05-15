@@ -1,9 +1,11 @@
 import torch.utils.data as data
 from PIL import Image
 import os
+import json
 import os.path
 import pandas as pd
 from pycocotools.coco import COCO
+
 
 class CocoCaptions(data.Dataset):
     """`MS Coco Captions Dataset.
@@ -43,6 +45,7 @@ class CocoCaptions(data.Dataset):
             u'A mountain view with a plume of smoke in the background']
 
     """
+
     def __init__(self, root, annotation_path, transform=None, target_transform=None):
         self.root = os.path.expanduser(root)
         self.coco = COCO(annotation_path)
@@ -77,20 +80,21 @@ class CocoCaptions(data.Dataset):
 
     def __len__(self):
         return len(self.ids)
-    
-if __name__ == "__main__":
+
+
+def create_csv():
     """
     Note that the Dataset class is not used since the open_clip API wants a single csv file.
     The creation of the csv file is done here.
     """
-    
+
     root = "/andromeda/datasets/COCO2017/COCO2017_train/train2017"
     path = "/andromeda/datasets/COCO2017/COCO2017_train/annotations/captions_train2017.json"
-    
+
     coco = COCO(path)
     ids = list(coco.imgs.keys())
     imgs = coco.loadImgs(coco.getImgIds())
-    future_df = {"filepath":[], "title":[]}
+    future_df = {"filepath": [], "title": []}
     for img, id in zip(imgs, ids):
         ann_ids = coco.getAnnIds(imgIds=id, iscrowd=None)
         anns = coco.loadAnns(ann_ids)
@@ -101,3 +105,47 @@ if __name__ == "__main__":
     pd.DataFrame.from_dict(future_df).to_csv(
         os.path.join(root, "train2017.csv"), index=False, sep="\t"
     )
+
+
+def create_json(root_path, path_root, root_project, new_file="train2017.json"):
+    coco = COCO(path_root)
+
+    ids = list(coco.imgs.keys())
+    imgs = coco.loadImgs(ids)
+
+    data = []
+
+    for img in imgs:
+        element = {}
+        img_id = img['id']
+        file_name = img['file_name']
+
+        ann_ids = coco.getAnnIds(imgIds=img_id, iscrowd=None)
+        anns = coco.loadAnns(ann_ids)
+
+        captions = [ann['caption'] for ann in anns]
+
+        element["image"] = os.path.join(root_path, file_name)
+        element["caption"] = captions
+
+        data.append(element)
+
+    output_path = os.path.join(root_project, new_file)
+    with open(output_path, 'w') as f:
+        json.dump(data, f, indent=4)
+
+
+if __name__ == "__main__":
+    root_project = "./datasets"
+
+    root_train = "/andromeda/datasets/COCO2017/COCO2017_train/train2017"
+    path_train = "/andromeda/datasets/COCO2017/COCO2017_train/annotations/captions_train2017.json"
+
+    root_val = "/andromeda/datasets/COCO2017/COCO2017_val/val2017"
+    path_val = "/andromeda/datasets/COCO2017/COCO2017_val/annotations/captions_val2017.json"
+
+    new_file_val = "val2017.json"
+    new_file_train = "train2017.json"
+
+    create_json(root_train, path_train, root_project, new_file_train)
+    create_json(root_val, path_val, root_project, new_file_val)

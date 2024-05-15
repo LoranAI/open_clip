@@ -1,10 +1,8 @@
 # CLIP parameters
 dataset-type: csv
 aro-datasets-path: /equilibrium/datasets/aro_datasets
-train-data: "datasets/train2017.csv"
-val-data: "datasets/val2017.csv"
-# train-data: /andromeda/datasets/COCO2017/COCO2017_train/train2017
-# val-data: /andromeda/datasets/COCO2017/COCO2017_val/val2017
+train-data: ./datasets/train2017.csv
+val-data: ./datasets/val2017.csv
 warmup: 50
 batch-size: 128 
 lr: 1e-6

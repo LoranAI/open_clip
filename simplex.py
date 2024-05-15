@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import itertools
-import torch.nn.functional as F
 from timm.models.vision_transformer import VisionTransformer
+
 
 class Symplex(nn.Module):
     """
@@ -83,6 +83,7 @@ class Symplex(nn.Module):
         vec = torch.tensor(list(itertools.product([-1, 1], repeat=self.out_features)), dtype=torch.float32)
         vec = vec / torch.norm(vec, p=2, dim=1, keepdim=True)
         return vec
+
 
 class VisionTransformerSymplex(VisionTransformer):
     def __init__(self, *args, **kwargs):

@@ -12,6 +12,8 @@ import torch
 from torch import optim
 from torch.cuda.amp import GradScaler
 
+from datasets.aro_datasets.clip_models import CLIPWrapper
+
 try:
     import wandb
 except ImportError:
@@ -33,7 +35,7 @@ from training.distributed import is_master, init_distributed_device, broadcast_o
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, evaluate, evaluate_ARO, evaluate_VAL
+from training.train import train_one_epoch, evaluate, evaluate_ARO, evaluate_COCO2017
 from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
 
 
@@ -419,17 +421,18 @@ def main(args):
         logging.info('Compiling model...')
         model = torch.compile(original_model)
 
-    # FIXME evaluate before training
-    # Evaluate before training to visualize the model's performance before training.
-    # evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
-
+    # FIXME THIS EVALUATION METHOD BEFORE THE TRAINING
     if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
         logging.info("evaluating zero-shot")
-        # evaluate(model, data, start_epoch, args, writer)
-        evaluate_VAL(model, data, get_tokenizer(args.model), start_epoch, args, writer)
+        evaluate(model, data, start_epoch, args, writer)
     if any(v in data for v in ('aro_eval',)):
         logging.info("evaluating aro datasets")
+
+        # FIXME NOT USE THIS EVALUATE ARO
         # evaluate_ARO(model, data, get_tokenizer(args.model), start_epoch, args, writer)
+
+        clip_model = CLIPWrapper(model, device)
+        evaluate_COCO2017(clip_model, data['aro_eval'], start_epoch, args)
     if 'train' not in data:
         return
 
@@ -444,6 +447,9 @@ def main(args):
 
         if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
             evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
+            # FIXME CHECK THE CORRECT WAY TO EVALUTE AND ADD TO WANDB
+            clip_model = CLIPWrapper(model, device)
+            evaluate_COCO2017(clip_model, data['aro_eval'], epoch, args)
 
         # Saving checkpoints.
         if args.save_logs:

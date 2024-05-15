@@ -21,7 +21,7 @@ if __name__ == '__main__':
     eval = hyperparameters_eval_path
     train = hyperparameters_path
 
-    with open(eval) as file:
+    with open(train) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
     args = convert_yaml_to_argv(config)
 

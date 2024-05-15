@@ -288,6 +288,7 @@ class CustomResidualAttentionBlock(nn.Module):
 def _expand_token(token, batch_size: int):
     return token.view(1, 1, -1).expand(batch_size, -1, -1)
 
+
 class Transformer(nn.Module):
     def __init__(
             self,
@@ -323,6 +324,7 @@ class Transformer(nn.Module):
             else:
                 x = r(x, attn_mask=attn_mask)
         return x
+
 
 class VisionTransformer(nn.Module):
     output_tokens: torch.jit.Final[bool]
@@ -544,6 +546,7 @@ class VisionTransformer(nn.Module):
             return pooled, tokens
         
         return pooled
+
 
 def text_global_pool(x, text: Optional[torch.Tensor] = None, pool_type: str = 'argmax'):
     if pool_type == 'first':
@@ -922,6 +925,7 @@ class PolytopeVisionTransformer(VisionTransformer):
         
     def forward(self, x: torch.Tensor):
         return super().forward(x)
+
     
 class PolytopeTextTransformer(TextTransformer):
     """

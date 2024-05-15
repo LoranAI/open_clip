@@ -356,75 +356,6 @@ class Flickr30k_Order(Dataset):
         return result_records
 
 
-class COCO2017(Dataset):
-    def __init__(self, image_preprocess=None, root_dir=COCO_ROOT, max_words=30, split="test",
-                 image_perturb_fn=None):
-        """
-        COCO 2017 Dataset.
-        image_preprocess: image preprocessing function
-        root_dir: The directory of the coco dataset. This directory should contain test2017 files.
-        max_words: Cropping the caption to max_words.
-        split: 'val' or 'test'
-        image_perturb_fn: not used; for compatibility.
-        """
-        shuffler = TextShuffler()
-        perturb_functions = [shuffler.shuffle_nouns_and_adj, shuffler.shuffle_allbut_nouns_and_adj,
-                             shuffler.shuffle_within_trigrams, shuffler.shuffle_trigrams]
-
-        self.root_dir = root_dir
-        if not os.path.exists(root_dir):
-            print("Directory for COCO could not be found!")
-
-        filenames = {'val': 'coco_karpathy_val.json', 'test': 'coco_karpathy_test.json'}
-        self.annotation = json.load(open(os.path.join(root_dir, filenames[split]), 'r'))
-        self.image_preprocess = image_preprocess
-        self.image_root = root_dir
-
-        self.test_cases = []
-        if not os.path.exists(os.path.join(root_dir, "test_case.pkl")):
-            for img_id, ann in tqdm(enumerate(self.annotation)):
-                for i, caption in enumerate(ann['caption']):
-                    test_case = {}
-                    test_case["image"] = ann["image"]
-                    test_case["caption_options"] = [pre_caption(caption, max_words)]
-
-                    for perturb_fn in perturb_functions:
-                        test_case["caption_options"].append(pre_caption(perturb_fn(caption), max_words))
-                    self.test_cases.append(test_case)
-            pickle.dump(self.test_cases, open(os.path.join(root_dir, "test_case.pkl"), "wb"))
-        else:
-            self.test_cases = pickle.load(open(os.path.join(root_dir, "test_case.pkl"), "rb"))
-
-    def __len__(self):
-        return len(self.test_cases)
-
-    def __getitem__(self, index):
-        test_case = self.test_cases[index]
-        image_path = os.path.join(self.image_root, test_case["image"])
-
-        image = Image.open(image_path).convert('RGB')
-        if self.image_preprocess is not None:
-            image = self.image_preprocess(image)
-
-        item = edict({"image_options": [image], "caption_options": test_case["caption_options"]})
-        return item
-
-    def evaluate_scores(self, scores):
-        if isinstance(scores, tuple):
-            scores_i2t = scores[0]
-            scores_t2i = scores[1].T  # Make it N_ims x N_text
-
-        else:
-            scores_t2i = scores
-            scores_i2t = scores
-
-        preds = np.argmax(np.squeeze(scores_i2t, axis=1), axis=-1)
-        correct_mask = (preds == 0)
-        records = [{"Precision@1": np.mean(correct_mask)}]
-        return records
-
-
-
 def get_visual_genome_relation(image_preprocess, text_perturb_fn=None, image_perturb_fn=None, download=False):
     return VG_Relation(image_preprocess=image_preprocess, text_perturb_fn=text_perturb_fn,
                        image_perturb_fn=image_perturb_fn, download=download)
@@ -447,8 +378,3 @@ def get_flickr30k_order(image_preprocess, image_perturb_fn, text_perturb_fn, max
     return Flickr30k_Order(root_dir=root_dir, split=split, image_preprocess=image_preprocess,
                            image_perturb_fn=image_perturb_fn, max_words=max_words,
                            download=download)
-
-
-def get_coco2017(image_preprocess, image_perturb_fn, text_perturn_fn, max_words=30, root_dir="", split="test"):
-    return COCO2017(root_dir=root_dir, split=split, image_preprocess=image_preprocess,
-                    image_perturb_fn=image_perturb_fn, max_words=max_words)

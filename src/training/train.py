@@ -23,6 +23,7 @@ from tqdm import tqdm
 import numpy as np
 from torch.utils.data import DataLoader
 import pandas as pd
+from torch.utils.data import Dataset
 
 
 class AverageMeter(object):
@@ -444,6 +445,62 @@ def get_clip_metrics(image_features, text_features, logit_scale):
     return metrics
 
 
+def evaluate_COCO2017(model, dataset, step, args):
+    dataset = dataset['coco2017']
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+    scores = model.get_retrieval_scores_dataset(loader)
+    result_records = dataset.evaluate_scores(scores)
+    # FIXME Add scores on wandb
+    if args.wandb:
+        assert wandb is not None, 'Please install wandb.'
+        wandb.log(result_records[0], step=step)
+
+
+# TODO implement the new version of retrival scores
+def get_clip_too_metrics():
+    if isinstance(scores, tuple):
+        scores_i2t = scores[0]
+        scores_t2i = scores[1].T  # Make it N_ims x N_text
+
+    else:
+        scores_t2i = scores
+        scores_i2t = scores
+
+    print(f"COCO results across {scores_i2t.shape} samples. ")
+    prec_at_1 = AverageMeter()
+    prec_at_5 = AverageMeter()
+
+    # Text retrieval
+    tqdm_iterator = tqdm(range(len(self.img2txt)))
+    for i in tqdm_iterator:
+        top5_captions = np.argsort(scores_i2t[i])[-5:]
+        true_captions = self.img2txt[i]
+
+        prec_at_1.update(len(set(true_captions) & set(top5_captions[-1:])) > 0)
+        prec_at_5.update(len(set(true_captions) & set(top5_captions)) > 0)
+
+        tqdm_iterator.set_description(f"Text Retrieval Prec@1: {prec_at_1.avg:.3f}, Prec@5: {prec_at_5.avg:.3f}")
+
+    # Image Retrieval
+    image_prec_at_1 = AverageMeter()
+    image_prec_at_5 = AverageMeter()
+
+    tqdm_iterator = tqdm(range(len(self.txt2img)))
+    for i in tqdm_iterator:
+        top5_images = np.argsort(scores_t2i[:, i])[-5:]
+        true_image = self.txt2img[i]
+
+        image_prec_at_1.update(true_image in top5_images[-1:])
+        image_prec_at_5.update(true_image in top5_images)
+
+        tqdm_iterator.set_description(
+            f"Image Retrieval Prec@1: {image_prec_at_1.avg:.3f}, Prec@5: {image_prec_at_5.avg:.3f}")
+
+    records = [{"ImagePrec@1": image_prec_at_1.avg, "ImagePrec@5": image_prec_at_5.avg, "TextPrec@1": prec_at_1.avg,
+                "TextPrec@5": prec_at_5.avg}]
+    return records
+
+
 def maybe_compute_generative_loss(model_out):
     if "logits" in model_out and "labels" in model_out:
         token_logits = model_out["logits"]
@@ -502,91 +559,8 @@ def get_retrieval_scores_batched(model,  # assuming to have a CLIPModel
     return all_scores
 
 
-# FIXME Check if working
-def evaluate_VAL(model, data, tokenizer, epoch, args, tb_writer=None):
-    metrics = {}
-    if not is_master(args):
-        return metrics
-    device = torch.device(args.device)
-    model.eval()
-
-    dataset = data["val"]
-    all_scores = get_retrieval_scores_batched_VAL(model,
-                                                  dataset,
-                                                  device)
-    scores = evaluate_scores_VAL(all_scores)
-
-    metric_name = 'Precision@1'
-    accuracy = scores[0][metric_name]
-
-    logging.info(f"Eval Epoch {epoch - 1}: accuracy: {accuracy:.4f}")
-    if args.wandb:
-        assert wandb is not None, 'Please install wandb.'
-        wandb.log({f"val/{metric_name}": accuracy, 'epoch': epoch})
 
 
-@torch.no_grad()
-def get_retrieval_scores_batched_VAL(model,  # assuming to have a CLIPModel
-                                     dataset,
-                                     device="cuda"
-                                     ):
-    """
-    from https://github.com/mertyg/vision-language-models-are-bows/blob/main/model_zoo/clip_models.py#L55
-    Computes the scores for each image_option / caption_option pair in the joint loader.
-
-    Args:
-        joint_loader (DataLoader): batches have "image_options" and "caption_options" fields.
-        "image_options" is a list of images, and "caption_options" is a list of captions.
-
-    Returns:
-        all_scores: A numpy array containing the scores of the shape NxKxL,
-        where N is the number of test cases, K is the number of image options per the test case,
-        and L is the number of caption options per the test case.
-    """
-    scores = []
-    data_loader = dataset.dataloader
-    tqdm_loader = tqdm(data_loader)
-    tqdm_loader.set_description("Computing retrieval scores")
-    for batch in tqdm_loader:
-        image_options = []
-        i_option = batch[0]
-        # i_option = torch.cat(i_option.pixel_values)
-        # i_option = torch.cat(i_option)
-        image_embeddings = model.encode_image(i_option.to(device)).cpu().numpy()  # B x D
-        image_embeddings = image_embeddings / np.linalg.norm(image_embeddings, axis=1, keepdims=True)  # B x D
-        image_options.append(np.expand_dims(image_embeddings, axis=1))
-
-        caption_options = []
-        c_option = batch[1]
-        # caption_tokenized = torch.cat([clip.tokenize(c) for c in c_option])
-        caption_tokenized = c_option
-        caption_embeddings = model.encode_text(caption_tokenized.to(device)).cpu().numpy()  # B x D
-        caption_embeddings = caption_embeddings / np.linalg.norm(caption_embeddings, axis=1, keepdims=True)  # B x D
-        caption_options.append(np.expand_dims(caption_embeddings, axis=1))
-
-        image_options = np.concatenate(image_options, axis=1)  # B x K x D
-        caption_options = np.concatenate(caption_options, axis=1)  # B x L x D
-        batch_scores = np.einsum("nkd,nld->nkl", image_options, caption_options)  # B x K x L
-        scores.append(batch_scores)
-
-    all_scores = np.concatenate(scores, axis=0)  # N x K x L
-    return all_scores
 
 
-def evaluate_scores_VAL(scores):
 
-    if isinstance(scores, tuple):
-        scores_i2t = scores[0]
-        scores_t2i = scores[1].T  # Make it N_ims x N_text
-
-    else:
-        scores_t2i = scores
-        scores_i2t = scores
-
-    preds = np.argmax(np.squeeze(scores_i2t, axis=1), axis=-1)
-    correct_mask = (preds == 0)
-    records = [{"Precision@1": np.mean(correct_mask)}]
-    for k in [1, 5, 10]:
-        stringss = f"RECALL@{k}: {np.mean(preds < k)}"
-        print(stringss)
-    return records
