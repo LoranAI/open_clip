@@ -807,15 +807,15 @@ class Simplex(nn.Module):
         in_features: int, input features
         out_features: int, output features
         n_classes: int, number of classes
-        symplex_type: str, type of symplex to use. Options are 'd-symplex', 'd-ortoplex', 'd-cube'
+        simplex_type: str, type of symplex to use. Options are 'd-simplex', 'd-ortoplex', 'd-cube'
     """
     def __init__(self, 
                  in_features: int, 
                  out_features: int, 
                  n_classes: int, 
-                 symplex_type: str = 'd-symplex'):
+                 simplex_type: str = 'd-symplex'):
         super().__init__()
-        self.symplex_type = symplex_type
+        self.simplex_type = simplex_type
         self.in_features = in_features
         self.out_features = out_features
         self.n_classes = n_classes
@@ -824,22 +824,22 @@ class Simplex(nn.Module):
         self.symplex = torch.nn.Linear(self.out_features, self.n_classes, bias=False)
         self.symplex.weight.requires_grad = False
         
-        if self.symplex_type == 'd-symplex':
+        if self.simplex_type == 'd-simplex':
             if self.out_features != self.n_classes - 1:
-                raise ValueError(f"dim must be n_classes - 1 for symplex_type {self.symplex_type}")
+                raise ValueError(f"dim must be n_classes - 1 for simplex_type {self.simplex_type}")
             self.symplex.weight.copy_(self.d_symplex())
-        elif self.symplex_type == 'd-ortoplex':
+        elif self.simplex_type == 'd-ortoplex':
             if self.out_features != torch.ceil(torch.tensor(self.n_classes/2)).int():
                 self.symplex.weight.copy_(self.ortoplex())
-        elif self.symplex_type == 'd-cube':
+        elif self.simplex_type == 'd-cube':
             self.target_dim = 2 ** self.out_features
             if self.target_dim != self.n_classes:
-                raise ValueError(f"dim must be 2**dim for symplex_type {self.symplex_type}")
+                raise ValueError(f"dim must be 2**dim for simplex_type {self.simplex_type}")
             if self.out_features != torch.ceil(torch.log2(torch.tensor(self.n_classes))).int():
-                raise ValueError(f"dim must be log2(n_classes) for symplex_type {self.symplex_type}")
+                raise ValueError(f"dim must be log2(n_classes) for simplex_type {self.simplex_type}")
             self.symplex.weight.copy_(self.d_cube())
         else:
-            raise ValueError(f"symplex_type {self.symplex_type} not recognized")
+            raise ValueError(f"simplex_type {self.simplex_type} not recognized")
         
     def forward(self, x):
         return self.symplex(self.fc(x))
@@ -884,7 +884,7 @@ class PolytopeTransformer(Transformer):
     PolytopeTransformer is a transformer model that uses a simplex layer after the transformer
     """
 
-    def _init_(
+    def __init__(
             self,
             width: int,
             layers: int,
@@ -910,7 +910,7 @@ class PolytopeTransformer(Transformer):
         :param simplex_type: str: new attribute for the simplex type
         """
 
-        super()._init_(
+        super().__init__(
             width=width,
             layers=layers,
             heads=heads,
@@ -921,13 +921,16 @@ class PolytopeTransformer(Transformer):
         )
         self.n_classes = n_classes
         self.simplex_type = simplex_type
+        self.out_features = None
 
-        if simplex_type == "d_simplex_type":
+        if self.simplex_type == "d-simplex":
             self.out_features = self.n_classes - 1
-        if simplex_type == "d_orthoplex_type":
-            self.out_features = torch.ceil(torch.tensor(self.n_classes / 2)).int()
-        if simplex_type == "d_cube_type":
-            self.out_features = torch.ceil(torch.log2(torch.tensor(self.n_classes))).int()
+        elif self.simplex_type == "d-orthoplex":
+            self.out_features = torch.ceil(torch.tensor(self.n_classes / 2)).int().item()
+        elif self.simplex_type == "d-cube":
+            self.out_features = torch.ceil(torch.log2(torch.tensor(self.n_classes))).int().item()
+        else: 
+            raise ValueError("Undefined simplex type")
 
         self.simplex = Simplex(self.width, self.out_features, self.n_classes, self.simplex_type)
 
@@ -935,13 +938,13 @@ class PolytopeTransformer(Transformer):
         x = super().forward(x, attn_mask)
         x = self.simplex(x)  # NOTE: check for attention mask usage.
         return x
-    
+      
 class PolytopeVisionTransformer(VisionTransformer):
     """
     PolytopeVisionTransformer is a vision transformer model that uses a simplex layer after the transformer
     """
 
-    def _init_(
+    def __init__(
             self,
             image_size: int,
             patch_size: int,
@@ -961,38 +964,15 @@ class PolytopeVisionTransformer(VisionTransformer):
             pool_type: str = 'tok',
             final_ln_after_pool: bool = False,
             act_layer: Callable = nn.GELU,
-            norm_layer: Callable = LayerNorm,
+            norm_layer: Callable = nn.LayerNorm,
             output_tokens: bool = False,
             simplex_type: str = "d_simplex_type",
     ):
         """
         Initialize the PolytopeVisionTransformer model
-
-        :param image_size: int:
-        :param patch_size: int:
-        :param width: int:
-        :param layers: int:
-        :param heads: int:
-        :param mlp_ratio: float:
-        :param n_classes: int: new attribute for the number of classes
-        :param ls_init_value: float:
-        :param attentional_pool: bool:
-        :param attn_pooler_queries: int:
-        :param attn_pooler_heads: int:
-        :param output_dim: int:
-        :param patch_dropout: float:
-        :param no_ln_pre: bool:
-        :param pos_embed_type: str:
-        :param pool_type: str:
-        :param final_ln_after_pool: bool:
-        :param act_layer: Callable:
-        :param norm_layer: Callable:
-        :param output_tokens: bool:
-        :param simplex_type: str: new attribute for the simplex type
-        
         """
 
-        super()._init_(
+        super().__init__(
             image_size=image_size,
             patch_size=patch_size,
             width=width,
@@ -1013,15 +993,18 @@ class PolytopeVisionTransformer(VisionTransformer):
             norm_layer=norm_layer,
             output_tokens=output_tokens,
         )
+        self.n_classes = n_classes
+        self.simplex_type = simplex_type
+        
         self.transformer = PolytopeTransformer(
-            width=self.width,
-            layers=self.layers,
-            heads=self.heads,
+            width=width,
+            layers=layers,
+            heads=heads,
             n_classes=n_classes,
-            mlp_ratio=self.mlp_ratio,
-            ls_init_value=self.ls_init_value,
-            act_layer=self.act_layer,
-            norm_layer=self.norm_layer,
+            mlp_ratio=mlp_ratio,
+            ls_init_value=ls_init_value,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
             simplex_type=simplex_type,
         )
         
@@ -1033,7 +1016,7 @@ class PolytopeTextTransformer(TextTransformer):
     PolytopeVisionTransformer is a vision transformer model that uses a simplex layer after the transformer
     """
 
-    def _init_(
+    def __init__(
             self,
             n_classes: int,
             simplex_type: str = "d_simplex_type",
@@ -1077,7 +1060,7 @@ class PolytopeTextTransformer(TextTransformer):
         :param output_tokens: bool:
         """
 
-        super()._init_(
+        super().__init__(
             context_length=context_length,
             vocab_size=vocab_size,
             width=width,
@@ -1096,14 +1079,14 @@ class PolytopeTextTransformer(TextTransformer):
             output_tokens=output_tokens,
         )
         self.transformer = PolytopeTransformer(
-            width=self.width,
-            layers=self.layers,
-            heads=self.heads,
+            width=width,
+            layers=layers,
+            heads=heads,
             n_classes=n_classes,
-            mlp_ratio=self.mlp_ratio,
-            ls_init_value=self.ls_init_value,
-            act_layer=self.act_layer,
-            norm_layer=self.norm_layer,
+            mlp_ratio=mlp_ratio,
+            ls_init_value=ls_init_value,
+            act_layer=act_layer,
+            norm_layer=norm_layer,
             simplex_type=simplex_type,
         )
         

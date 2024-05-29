@@ -109,7 +109,7 @@ class SimplexCLIPTextCfg():
     hf_proj_type: str = 'mlp'
     hf_pooler_type: str = 'mean_pooler'  # attentional pooling for HF models
     n_classes: int = width
-    symplex_type: str = 'd-symplex'
+    simplex_type: str = 'd-simplex'
 
 @dataclass
 class SimplexCLIPVisionCfg():
@@ -141,7 +141,7 @@ class SimplexCLIPVisionCfg():
     timm_drop: float = 0.  # head dropout
     timm_drop_path: Optional[float] = None  # backbone stochastic depth
     n_classes: int = width
-    symplex_type: str = 'd-symplex'
+    simplex_type: str = 'd-simplex'
 
 def get_cast_dtype(precision: str):
     cast_dtype = None
@@ -272,7 +272,6 @@ def _build_poly_vision_tower(
             norm_layer = partial(norm_layer, **vision_cfg.norm_kwargs)
         if vision_cfg.act_kwargs is not None:
             act_layer = partial(act_layer, **vision_cfg.act_kwargs)
-
         visual = PolytopeVisionTransformer(
             image_size=vision_cfg.image_size,
             patch_size=vision_cfg.patch_size,
@@ -291,7 +290,7 @@ def _build_poly_vision_tower(
             pool_type=vision_cfg.pool_type,
             output_tokens=vision_cfg.output_tokens,
             n_classes=vision_cfg.n_classes,
-            symplex_type=vision_cfg.symplex_type,
+            simplex_type=vision_cfg.simplex_type,
             output_dim=embed_dim,
             act_layer=act_layer,
             norm_layer=norm_layer,
@@ -390,7 +389,7 @@ def _build_poly_text_tower(
             act_layer=act_layer,
             norm_layer=norm_layer,
             n_classes=text_cfg.n_classes,
-            symplex_type=text_cfg.symplex_type,
+            simplex_type=text_cfg.simplex_type,
         )
         
     return text
@@ -801,3 +800,42 @@ def get_model_tokenize_cfg(model):
     if vocab_size is not None:
         cfg['vocab_size'] = vocab_size
     return cfg
+
+class PolytopeCLIP(CLIP):
+
+    def __init__(
+            self,
+            embed_dim: int,
+            vision_cfg: SimplexCLIPVisionCfg,
+            text_cfg: SimplexCLIPTextCfg,
+            quick_gelu: bool = False,
+            init_logit_scale: float = np.log(1 / 0.07),
+            init_logit_bias: Optional[float] = None,
+            cast_dtype: Optional[torch.dtype] = None,
+            output_dict: bool = False,
+    ):
+        super().__init__(
+            embed_dim=embed_dim,
+            vision_cfg=vision_cfg,
+            text_cfg=text_cfg,
+            quick_gelu=quick_gelu,
+            init_logit_scale=init_logit_scale,
+            init_logit_bias=init_logit_bias,
+            cast_dtype=cast_dtype,
+            output_dict=output_dict,
+        )
+
+        self.visual = _build_poly_vision_tower(embed_dim, vision_cfg, quick_gelu, cast_dtype)
+
+        text = _build_poly_text_tower(embed_dim, text_cfg, quick_gelu, cast_dtype)
+        self.transformer = text.transformer
+        self.context_length = text.context_length
+        self.vocab_size = text.vocab_size
+        self.token_embedding = text.token_embedding
+        self.positional_embedding = text.positional_embedding
+        self.ln_final = text.ln_final
+        self.text_projection = text.text_projection
+        self.text_pool_type = text.pool_type
+        self.register_buffer('attn_mask', text.attn_mask, persistent=False)
+        
+

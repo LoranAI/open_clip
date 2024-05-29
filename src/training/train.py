@@ -445,7 +445,7 @@ def get_clip_metrics(image_features, text_features, logit_scale):
     return metrics
 
 
-def evaluate_COCO2017(model, dataset, step, args):
+def evaluate_COCO2017(model, dataset, epoch, args):
     dataset = dataset['coco2017']
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
     scores = model.get_retrieval_scores_dataset(loader)
@@ -453,7 +453,10 @@ def evaluate_COCO2017(model, dataset, step, args):
     # FIXME Add scores on wandb
     if args.wandb:
         assert wandb is not None, 'Please install wandb.'
-        wandb.log(result_records[0], step=step)
+        res = result_records[0]
+        log_data = {"recall/" + name: val for name, val in res.items()}
+        log_data['epoch'] = epoch
+        wandb.log(log_data)
 
 
 # TODO implement the new version of retrival scores

@@ -449,7 +449,7 @@ def main(args):
             evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
             # FIXME CHECK THE CORRECT WAY TO EVALUTE AND ADD TO WANDB
             clip_model = CLIPWrapper(model, device)
-            evaluate_COCO2017(clip_model, data['aro_eval'], epoch, args)
+            evaluate_COCO2017(clip_model, data['aro_eval'], completed_epoch, args)
 
         # Saving checkpoints.
         if args.save_logs:
