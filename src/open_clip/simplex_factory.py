@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 
+from open_clip.simplex_model import PolytopeCLIP
+
 from .constants import OPENAI_DATASET_MEAN, OPENAI_DATASET_STD
 from .convert import convert_state_dict
 from .model import CLIP, CustomTextCLIP, convert_weights_to_lp, convert_to_custom_text_state_dict,\
@@ -264,7 +266,7 @@ def create_model(
             else:
                 model = CustomTextCLIP(**model_cfg, cast_dtype=cast_dtype)
         else:
-            model = CLIP(**model_cfg, cast_dtype=cast_dtype)
+            model = PolytopeCLIP(**model_cfg, cast_dtype=cast_dtype)
 
         if precision in ("fp16", "bf16"):
             dtype = torch.float16 if 'fp16' in precision else torch.bfloat16

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import random
 from datetime import datetime
+from functools import partial
 
 import numpy as np
 import torch
@@ -30,13 +31,16 @@ except ImportError:
     hvd = None
 
 from open_clip import create_model_and_transforms, trace_model, get_tokenizer, create_loss
-from training.data import get_data
-from training.distributed import is_master, init_distributed_device, broadcast_object
-from training.logger import setup_logging
-from training.params import parse_args
-from training.scheduler import cosine_lr, const_lr, const_lr_cooldown
-from training.train import train_one_epoch, evaluate, evaluate_ARO, evaluate_COCO2017
-from training.file_utils import pt_load, check_exists, start_sync_process, remote_sync
+from open_clip_train.data import get_data
+from open_clip_train.distributed import is_master, init_distributed_device, broadcast_object
+from open_clip_train.logger import setup_logging
+from open_clip_train.params import parse_args
+from open_clip_train.scheduler import cosine_lr, const_lr, const_lr_cooldown
+from open_clip_train.train import train_one_epoch, evaluate
+from open_clip_train.file_utils import pt_load, check_exists, start_sync_process, remote_sync
+
+# NOTE: CLIPEX - Import evaluate_COCO2017
+from open_clip_train.train_aro import evaluate_COCO2017
 
 
 LATEST_CHECKPOINT_NAME = "epoch_latest.pt"
@@ -53,7 +57,7 @@ def natural_key(string_):
     return [int(s) if s.isdigit() else s for s in re.split(r'(\d+)', string_.lower())]
 
 
-def get_latest_checkpoint(path: str, remote: bool):
+def get_latest_checkpoint(path: str, remote : bool):
     # as writen, this glob recurses, so can pick up checkpoints across multiple sub-folders
     if remote:
         result = subprocess.run(["aws", "s3", "ls", path + "/"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -362,7 +366,7 @@ def main(args):
         tokenizer=tokenizer,
     )
     assert len(data), 'At least one train or eval dataset must be specified.'
-    
+
     # create scheduler if train
     scheduler = None
     if 'train' in data and optimizer is not None:
@@ -400,8 +404,8 @@ def main(args):
         wandb.init(
             project=args.wandb_project_name,
             name=args.name,
-            # FIXME entity for your wandb account
-            entity='Bardas',
+            # NOTE: CLIPEX
+            entity=args.wandb_entity,
             id=args.name,
             notes=args.wandb_notes,
             tags=[],
@@ -421,19 +425,24 @@ def main(args):
         logging.info('Compiling model...')
         model = torch.compile(original_model)
 
-    # FIXME THIS EVALUATION METHOD BEFORE THE TRAINING
+    # NOTE: Evaluation before the training loop
     if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
         logging.info("evaluating zero-shot")
         evaluate(model, data, start_epoch, args, writer)
     if any(v in data for v in ('aro_eval',)):
         logging.info("evaluating aro datasets")
 
-        # FIXME NOT USE THIS EVALUATE ARO
-        # evaluate_ARO(model, data, get_tokenizer(args.model), start_epoch, args, writer)
-
+        # NOTE: CLIPEX - Evaluate COCO2017
         clip_model = CLIPWrapper(model, device)
         evaluate_COCO2017(clip_model, data['aro_eval'], start_epoch, args)
+
     if 'train' not in data:
+        # If using int8, convert to inference mode.
+        if args.use_bnb_linear is not None:
+            from open_clip.utils import convert_int8_model_to_inference_mode
+            convert_int8_model_to_inference_mode(model)
+        # Evaluate.
+        evaluate(model, data, start_epoch, args, tb_writer=writer, tokenizer=tokenizer)
         return
 
     loss = create_loss(args)
@@ -447,9 +456,10 @@ def main(args):
 
         if any(v in data for v in ('val', 'imagenet-val', 'imagenet-v2')):
             evaluate(model, data, completed_epoch, args, tb_writer=writer, tokenizer=tokenizer)
-            # FIXME CHECK THE CORRECT WAY TO EVALUTE AND ADD TO WANDB
+
+            # NOTE: CLIPEX - Evaluate COCO2017
             clip_model = CLIPWrapper(model, device)
-            evaluate_COCO2017(clip_model, data['aro_eval'], completed_epoch, args)
+            evaluate_COCO2017(clip_model, data['aro_eval'], start_epoch, args)
 
         # Saving checkpoints.
         if args.save_logs:

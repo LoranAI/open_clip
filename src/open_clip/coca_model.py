@@ -23,6 +23,8 @@ try:
         RepetitionPenaltyLogitsProcessor,
         MinLengthLogitsProcessor,
         MaxLengthCriteria,
+        StopStringCriteria,
+        EosTokenCriteria,
         StoppingCriteriaList
     )
 
@@ -74,6 +76,14 @@ def _build_text_decoder_tower(
     )
 
     return decoder
+
+
+def _token_to_tensor(token_id, device: str = "cpu") -> torch.Tensor:
+    if not isinstance(token_id, torch.Tensor):
+        if isinstance(token_id, int):
+            token_id = [token_id]
+        token_id = torch.tensor(token_id, device=device)
+    return token_id
 
 
 class CoCa(nn.Module):
@@ -160,6 +170,7 @@ class CoCa(nn.Module):
             text: Optional[torch.Tensor] = None,
             image_latent: Optional[torch.Tensor] = None,
             image_embs: Optional[torch.Tensor] = None,
+            output_labels: bool = True,
     ):
         if image_latent is None or image_embs is None:
             image_latent, image_embs = self._encode_image(image)
@@ -169,17 +180,21 @@ class CoCa(nn.Module):
 
         text_latent, token_embs = self._encode_text(text)
 
-        # TODO: add assertion to avoid bugs?
-        labels = text[:, -token_embs.shape[1]:]
+        # FIXME this isn't an ideal solution, would like to improve -RW
+        labels: Optional[torch.Tensor] = text[:, 1:] if output_labels else None
+        if output_labels:
+            # align text_embs and thus logits with labels for teacher-forcing caption loss
+            token_embs = token_embs[:, :-1]
 
         logits = self.text_decoder(image_embs, token_embs)
         out_dict = {
             "image_features": image_latent,
             "text_features": text_latent,
             "logits": logits,
-            "labels": labels,
             "logit_scale": self.logit_scale.exp()
         }
+        if labels is not None:
+            out_dict["labels"] = labels
         if self.logit_bias is not None:
             out_dict["logit_bias"] = self.logit_bias
         return out_dict
@@ -208,10 +223,11 @@ class CoCa(nn.Module):
         # https://huggingface.co/docs/transformers/main/en/main_classes/text_generation
         assert _has_transformers, "Please install transformers for generate functionality. `pip install transformers`."
         assert seq_len > min_seq_len, "seq_len must be larger than min_seq_len"
+        device = image.device
 
         with torch.no_grad():
-            sot_token_id = 49406 if sot_token_id is None else sot_token_id
-            eos_token_id = 49407 if eos_token_id is None else eos_token_id
+            sot_token_id = _token_to_tensor(49406 if sot_token_id is None else sot_token_id, device=device)
+            eos_token_id = _token_to_tensor(49407 if eos_token_id is None else eos_token_id, device=device)
             pad_token_id = self.pad_id if pad_token_id is None else pad_token_id
             logit_processor = LogitsProcessorList(
                 [
@@ -222,12 +238,7 @@ class CoCa(nn.Module):
 
             if stopping_criteria is None:
                 stopping_criteria = [MaxLengthCriteria(max_length=seq_len)]
-
-            stopping_criteria = StoppingCriteriaList(
-                stopping_criteria
-            )
-
-            device = image.device
+            stopping_criteria = StoppingCriteriaList(stopping_criteria)
 
             if generation_type == "beam_search":
                 output = self._generate_beamsearch(
@@ -242,8 +253,11 @@ class CoCa(nn.Module):
                     logit_processor=logit_processor,
                 )
                 if fixed_output_length and output.shape[1] < seq_len:
-                    return torch.cat(
-                        (output, torch.ones(output.shape[0], seq_len-output.shape[1], device=device, dtype=output.dtype) * self.pad_id),
+                    pad_len = seq_len - output.shape[1]
+                    return torch.cat((
+                            output,
+                            torch.ones(output.shape[0], pad_len, device=device, dtype=output.dtype) * pad_token_id
+                        ),
                         dim=1
                     )
                 return output
@@ -269,14 +283,19 @@ class CoCa(nn.Module):
             if num_dims == 1:
                 text = text[None, :]
 
-            cur_len = text.shape[1]
             self.eval()
             out = text
 
             while True:
                 x = out[:, -max_seq_len:]
                 cur_len = x.shape[1]
-                logits = self(image, x, image_latent=image_latent, image_embs=image_embs)["logits"][:, -1]
+                logits = self(
+                    image,
+                    x,
+                    image_latent=image_latent,
+                    image_embs=image_embs,
+                    output_labels=False,
+                )["logits"][:, -1]
                 mask = (out[:, -1] == eos_token_id) | (out[:, -1] == pad_token_id)
                 sample = torch.ones((out.shape[0], 1), device=device, dtype=torch.long) * pad_token_id
 
@@ -298,7 +317,7 @@ class CoCa(nn.Module):
 
                 cur_len += 1
 
-                if stopping_criteria(out, None):
+                if all(stopping_criteria(out, None)):
                     break
 
             if num_dims == 1:
@@ -372,7 +391,8 @@ class CoCa(nn.Module):
                 model_inputs['images'],
                 model_inputs['text'],
                 image_latent=image_latent,
-                image_embs=image_embs
+                image_embs=image_embs,
+                output_labels=False,
             )
 
             for beam_group_idx in range(num_beam_groups):
@@ -439,7 +459,7 @@ class CoCa(nn.Module):
 
             # increase cur_len
             cur_len = cur_len + 1
-            if beam_scorer.is_done or stopping_criteria(input_ids, None):
+            if beam_scorer.is_done or all(stopping_criteria(input_ids, None)):
                 break
 
         final_beam_indices = sum(beam_indices, ()) if beam_indices is not None else None

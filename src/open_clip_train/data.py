@@ -9,8 +9,6 @@ import braceexpand
 from dataclasses import dataclass
 from multiprocessing import Value
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import torch
@@ -22,7 +20,8 @@ from torch.utils.data.distributed import DistributedSampler
 from webdataset.filters import _shuffle
 from webdataset.tariterators import base_plus_ext, url_opener, tar_file_expander, valid_sample
 
-from datasets.aro_datasets.retrieval import COCO_Retrieval, COCO2017_Retrieval
+# NOTE: CLIPEX
+from datasets.aro_datasets.retrieval import COCO2017_Retrieval
 
 try:
     import horovod.torch as hvd
@@ -547,6 +546,32 @@ def get_dataset_fn(data_path, dataset_type):
         raise ValueError(f"Unsupported dataset type: {dataset_type}")
     
 
+def get_data(args, preprocess_fns, epoch=0, tokenizer=None):
+    preprocess_train, preprocess_val = preprocess_fns
+    data = {}
+
+    if args.train_data or args.dataset_type == "synthetic":
+        data["train"] = get_dataset_fn(args.train_data, args.dataset_type)(
+            args, preprocess_train, is_train=True, epoch=epoch, tokenizer=tokenizer)
+
+    if args.val_data:
+        data["val"] = get_dataset_fn(args.val_data, args.dataset_type)(
+            args, preprocess_val, is_train=False, tokenizer=tokenizer)
+        
+    # NOTE: CLIPEX
+    if args.aro_datasets_path:
+        data["aro_eval"] = get_aro_datasets(args.aro_datasets_path, preprocess_val)
+
+    if args.imagenet_val is not None:
+        data["imagenet-val"] = get_imagenet(args, preprocess_fns, "val")
+
+    if args.imagenet_v2 is not None:
+        data["imagenet-v2"] = get_imagenet(args, preprocess_fns, "v2")
+
+    return data
+
+
+# NOTE: CLIPEX
 def get_aro_datasets(aro_datasets_path, preprocess_val):
     import nltk                                                                                              
     nltk.download('punkt')
@@ -565,26 +590,3 @@ def get_aro_datasets(aro_datasets_path, preprocess_val):
 
     print('ARO datasets loaded')
     return datasets
-    
-
-def get_data(args, preprocess_fns, epoch=0, tokenizer=None):
-    preprocess_train, preprocess_val = preprocess_fns
-    data = {}
-
-    if args.train_data or args.dataset_type == "synthetic":
-        data["train"] = get_dataset_fn(args.train_data, args.dataset_type)(
-            args, preprocess_train, is_train=True, epoch=epoch, tokenizer=tokenizer)
-    if args.val_data:
-        data["val"] = get_dataset_fn(args.val_data, args.dataset_type)(
-            args, preprocess_val, is_train=False, tokenizer=tokenizer)
-
-    if args.aro_datasets_path:
-        data["aro_eval"] = get_aro_datasets(args.aro_datasets_path, preprocess_val)
-
-    if args.imagenet_val is not None:
-        data["imagenet-val"] = get_imagenet(args, preprocess_fns, "val")
-
-    if args.imagenet_v2 is not None:
-        data["imagenet-v2"] = get_imagenet(args, preprocess_fns, "v2")
-
-    return data

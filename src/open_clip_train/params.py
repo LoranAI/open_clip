@@ -452,9 +452,17 @@ def parse_args(args):
         action="store_true",
         help='Use SigLip (sigmoid) loss.'
     )
+
+    # NOTE: CLIPEX
     parser.add_argument(
         "--aro-datasets-path",
         help='List of paths of the datasets used for validation.'
+    )
+    parser.add_argument(
+        "--wandb-entity",
+        type=str,
+        default="Bardas",
+        help="Entity name for wandb logging."
     )
 
     args = parser.parse_args(args)

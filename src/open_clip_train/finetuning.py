@@ -1,7 +1,7 @@
 import yaml
 
-from training.main import main
-from training.utils import hyperparameters_eval_path, hyperparameters_path
+from .main import main
+from .utils import hyperparameters_path, hyperparameters_eval_path
 
 
 def convert_yaml_to_argv(yaml_dict):
@@ -16,7 +16,7 @@ def convert_yaml_to_argv(yaml_dict):
     return argv
 
 
-if __name__ == '__main__':
+def finetuning():
     # Load the configuration file
     eval = hyperparameters_eval_path
     train = hyperparameters_path
@@ -24,8 +24,5 @@ if __name__ == '__main__':
     with open(train) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
     args = convert_yaml_to_argv(config)
-
     main(args)
-
-
 
