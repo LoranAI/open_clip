@@ -14,7 +14,7 @@ class CLIPWrapper:
     def get_text_embeddings(self, texts, text_batch_size=256, normalize=False):
         num_text = len(texts)
         text_embeds = []
-        tqdm_loader = tqdm(range(0, num_text, text_batch_size))
+        tqdm_loader = tqdm(range(0, num_text, text_batch_size), leave=True)
         tqdm_loader.set_description("Computing text embeddings")
         for i in tqdm_loader:
             text = texts[i: min(num_text, i + text_batch_size)]
@@ -30,7 +30,7 @@ class CLIPWrapper:
     @torch.no_grad()
     def get_image_embeddings(self, image_loader, normalize=False):
         image_embeds = []
-        tqdm_loader = tqdm(image_loader)
+        tqdm_loader = tqdm(image_loader, leave=True)
         tqdm_loader.set_description("Computing image embeddings")
         for batch in tqdm_loader:
             images = batch["image"]

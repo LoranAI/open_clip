@@ -464,6 +464,12 @@ def parse_args(args):
         default="Bardas",
         help="Entity name for wandb logging."
     )
+    parser.add_argument(
+        "--polytope",
+        type=bool,
+        default=False,
+        help="Use the polytope model."
+    )
 
     args = parser.parse_args(args)
 

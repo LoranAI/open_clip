@@ -21,6 +21,9 @@ from .pretrained import is_pretrained_cfg, get_pretrained_cfg, download_pretrain
 from .transform import image_transform_v2, AugmentationCfg, PreprocessCfg, merge_preprocess_dict, merge_preprocess_kwargs
 from .tokenizer import HFTokenizer, SimpleTokenizer, DEFAULT_CONTEXT_LENGTH
 
+# NOTE: CLIPEX
+from .openai import load_openai_polytope_model
+
 HF_HUB_PREFIX = 'hf-hub:'
 _MODEL_CONFIG_PATHS = [Path(__file__).parent / f"model_configs/"]
 _MODEL_CONFIGS = {}  # directory (model_name: config) of model architecture configs
@@ -193,6 +196,7 @@ def create_model(
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
         require_pretrained: bool = False,
+        use_polytope: Optional[bool] = False,
         **model_kwargs,
 ):
     force_preprocess_cfg = force_preprocess_cfg or {}
@@ -215,12 +219,22 @@ def create_model(
 
     if pretrained and pretrained.lower() == 'openai':
         logging.info(f'Loading pretrained {model_name} from OpenAI.')
-        model = load_openai_model(
-            model_name,
-            precision=precision,
-            device=device,
-            cache_dir=cache_dir,
-        )
+        # NOTE: CLIPEX
+        if use_polytope:
+            logging.info(f'Loading Polytope model from OpenAI.')
+            model = load_openai_polytope_model(
+                model_name,
+                precision=precision,
+                device=device,
+                cache_dir=cache_dir,
+            )
+        else:
+            model = load_openai_model(
+                model_name,
+                precision=precision,
+                device=device,
+                cache_dir=cache_dir,
+            )
     else:
         model_cfg = model_cfg or get_model_config(model_name)
         if model_cfg is not None:
@@ -391,6 +405,7 @@ def create_model_and_transforms(
         pretrained_hf: bool = True,
         cache_dir: Optional[str] = None,
         output_dict: Optional[bool] = None,
+        use_polytope: Optional[bool] = False,
         **model_kwargs,
 ):
     force_preprocess_cfg = merge_preprocess_kwargs(
@@ -411,6 +426,7 @@ def create_model_and_transforms(
         pretrained_hf=pretrained_hf,
         cache_dir=cache_dir,
         output_dict=output_dict,
+        use_polytope=use_polytope,
         **model_kwargs,
     )
 

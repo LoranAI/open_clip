@@ -242,6 +242,7 @@ def main(args):
         aug_cfg=args.aug_cfg,
         pretrained_image=args.pretrained_image,
         output_dict=True,
+        use_polytope=args.polytope, # NOTE: CLIPEX
         **model_kwargs,
     )
     if args.distill:

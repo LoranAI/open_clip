@@ -11,6 +11,7 @@ epochs: 5
 workers: 8
 model: ViT-B-32
 pretrained: openai
+polytope: True
 report-to: wandb
 coca-contrastive-loss-weight: 0
 coca-caption-loss-weight: 1
