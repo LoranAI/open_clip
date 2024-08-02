@@ -50,3 +50,34 @@ Usare gli args per fare le cose in modo più pulito.
 Fare un test su clipex, o anche detto polytope clip, io direi di tenere anche CLIPEX come nome che al biondi piaceva.
 
 Ah se vedi ho modificato il nome dell'organizzazione in LoranAI, dato che non mi piaceva il nome di prima, se non ti piace possiamo cambiarlo, ma mi sembrava più carino.
+
+## COME E' composto il CLIP:
+CLIP:
+    VisionTransformer:
+        - ln_pre
+        - transformer
+        - ln_post
+        - proj -> che io ho tolto in favore di SIMPLEXCUSTOM
+
+    TextTransformer:
+        - token_emb
+        - pos_emb
+        - transformer
+        - ln_final
+        - text_projection -> che io ho tolto in favore di SIMPLEXCUSTOM
+
+Invece di PolytopeCLIP:
+    PolytopeVisionTransformer:
+        - ln_pre
+        - transformer
+        - ln_post
+        - proj
+        - polytope -> che è il nostro layer SIMPLEX
+    
+    PolytopeTextTransformer:
+        - token_emb
+        - pos_emb
+        - transformer
+        - ln_final
+        - text_projection
+        - polytope -> che è il nostro layer SIMPLEX
