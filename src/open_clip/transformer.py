@@ -455,6 +455,7 @@ class VisionTransformer(nn.Module):
             act_layer: Callable = nn.GELU,
             norm_layer: Callable = LayerNorm,
             output_tokens: bool = False,
+            simplex_type: str = 'd-simplex', # NOTE: CLIPEX
     ):
         super().__init__()
         assert pool_type in ('tok', 'avg', 'none')
@@ -534,7 +535,14 @@ class VisionTransformer(nn.Module):
             self.pool_type = pool_type
 
         self.ln_post = norm_layer(pool_dim)
-        self.proj = nn.Parameter(scale * torch.randn(pool_dim, output_dim))
+
+        # NOTE: CLIPEX
+        # ----
+        if simplex_type is not None:
+            self.proj = SimplexCustom(pool_dim, output_dim, simplex_type)
+        else:
+        # ----
+            self.proj = nn.Parameter(scale * torch.randn(pool_dim, output_dim))
 
         self.init_parameters()
 
@@ -642,7 +650,13 @@ class VisionTransformer(nn.Module):
             pooled, tokens = self._global_pool(x)
 
         if self.proj is not None:
-            pooled = pooled @ self.proj
+            # NOTE: CLIPEX
+            # ----
+            if isinstance(self.proj, SimplexCustom):
+                pooled = self.proj(pooled)
+            else:
+            # ----
+                pooled = pooled @ self.proj
 
         if self.output_tokens:
             return pooled, tokens
@@ -686,6 +700,7 @@ class TextTransformer(nn.Module):
             act_layer: Callable = nn.GELU,
             norm_layer: Callable = LayerNorm,
             output_tokens: bool = False,
+            simplex_type: str = 'd-simplex', # NOTE: CLIPEX
     ):
         super().__init__()
         assert pool_type in ('first', 'last', 'argmax', 'none')
@@ -721,10 +736,16 @@ class TextTransformer(nn.Module):
         else:
             self.register_buffer('attn_mask', self.build_causal_mask(), persistent=False)
 
-        if proj_bias:
-            self.text_projection = nn.Linear(width, output_dim)
+        # NOTE: CLIPEX
+        # ----
+        if simplex_type is not None:
+            self.text_projection = SimplexCustom(width, output_dim, simplex_type)
         else:
-            self.text_projection = nn.Parameter(torch.empty(width, output_dim))
+        # ----
+            if proj_bias:
+                self.text_projection = nn.Linear(width, output_dim)
+            else:
+                self.text_projection = nn.Parameter(torch.empty(width, output_dim))
 
         self.init_parameters()
 
@@ -743,7 +764,8 @@ class TextTransformer(nn.Module):
             nn.init.normal_(block.mlp.c_fc.weight, std=fc_std)
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
-        if self.text_projection is not None:
+        # NOTE: CLIPEX, remove nn.init.normal_ for SimplexCustom
+        if self.text_projection is not None and not isinstance(self.text_projection, SimplexCustom):
             if isinstance(self.text_projection, nn.Linear):
                 nn.init.normal_(self.text_projection.weight, std=self.transformer.width ** -0.5)
                 if self.text_projection.bias is not None:
@@ -798,7 +820,10 @@ class TextTransformer(nn.Module):
             pooled, tokens = text_global_pool(x, text, pool_type=self.pool_type)
 
         if self.text_projection is not None:
-            if isinstance(self.text_projection, nn.Linear):
+            # NOTE: CLIPEX, adding isinstance of SimplexCustom
+            # ----
+            instance_simplex = isinstance(self.text_projection, SimplexCustom)
+            if isinstance(self.text_projection, nn.Linear) or instance_simplex:
                 pooled = self.text_projection(pooled)
             else:
                 pooled = pooled @ self.text_projection
@@ -906,3 +931,81 @@ class MultimodalTransformer(Transformer):
     @torch.jit.ignore
     def set_grad_checkpointing(self, enable=True):
         self.grad_checkpointing = enable
+
+
+# NOTE: CLIPEX
+
+class SimplexCustom(nn.Module):
+    """
+    Symplex layer following the https://arxiv.org/abs/2103.15632 paper
+    
+    Args:
+        in_features: int, input features
+        out_features: int, output features
+        n_classes: int, number of classes
+        simplex_type: str, type of symplex to use. Options are 'd-simplex', 'd-ortoplex', 'd-cube'
+    """
+    def __init__(self, 
+                 out_features: int, 
+                 n_classes: int, 
+                 simplex_type: str = 'd-symplex'):
+        super().__init__()
+        self.simplex_type = simplex_type
+        self.out_features = out_features
+        self.n_classes = n_classes
+        
+        if self.simplex_type == 'd-simplex':
+            self.feat_size = self.n_classes - 1
+            self.fixed_weight = self.d_symplex()
+        elif self.simplex_type == 'd-ortoplex':
+            self.feat_size = torch.ceil(torch.tensor(self.n_classes / 2)).int().item()
+            self.fixed_weight = self.d_ortoplex()
+        elif self.simplex_type == 'd-cube':
+            self.feat_size = torch.ceil(torch.log2(torch.tensor(self.n_classes))).int().item()
+            self.fixed_weight = self.d_cube()
+        else:
+            raise ValueError(f"simplex_type {self.simplex_type} not recognized")
+
+        self.fc = torch.nn.Linear(self.out_features, self.feat_size, bias=False)
+        self.symplex = torch.nn.Linear(self.feat_size, self.n_classes, bias=False)
+
+        self.symplex.weight.requires_grad = False
+        self.symplex.weight.copy_(self.fixed_weight)
+        
+    def d_symplex(self):
+        """
+        Symplex is the generalization of a triangle or tetrahedron to arbitrary dimensions.
+        A symplex in n dimensional space is the convex hull of n+1 points that are not coplanar.
+        """
+        vec = torch.zeros((self.feat_size + 1, self.feat_size)) #matrix of shape (dim+1, dim)
+        torch.eye(self.feat_size, out=vec[:-1,:])           
+        alpha = (1.0 - torch.sqrt(1.0 + torch.tensor([self.feat_size]))) / self.feat_size
+        vec[-1,:].add_(alpha) 
+        vec.add_(-torch.mean(vec, dim=0)) #t = t - (1/d)
+        vec.div_(torch.norm(vec, p=2, dim=1, keepdim=True)+ 1e-8)
+        return vec
+
+    def d_ortoplex(self):
+        """
+        The vertices of a ortoplex can be choosed as unit vector pointing algoside each coordinate 
+        axis i.e. all the permutations of (-+1, 0, 0, ..., 0)
+        """
+        vec = torch.eye(self.feat_size)
+        vec = torch.cat([vec, -vec], dim=0) 
+        return vec
+    
+    def d_cube(self):
+        """
+        The d-cube is the set of all binary vectors in d dimensions. 
+        A unit hypercube in d-dimensional space is a convex hull of all the points whose 
+        d coordinates are either 0 or 1. Can be thought as the cartesian product [0, 1]^d
+        d times. The d-cube is the normalized version of the hypercube.
+        """
+        #vec = torch.tensor([[1 if (j >> i) % 2 == 0 else \
+        #    -1 for i in range(self.out_features)] for j in range(2 ** self.out_features)])
+        vec = torch.tensor(list(itertools.product([-1, 1], repeat=self.feat_size)), dtype=torch.float32)
+        vec = vec / torch.norm(vec, p=2, dim=1, keepdim=True)
+        return vec
+
+    def forward(self, x):
+        return self.symplex(self.fc(x))

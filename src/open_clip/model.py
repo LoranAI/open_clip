@@ -22,6 +22,9 @@ from .transformer import LayerNormFp32, LayerNorm, QuickGELU, Attention, VisionT
     text_global_pool
 from .utils import to_2tuple
 
+# NOTE: CLIPEX
+from .transformer import SimplexCustom
+
 
 @dataclass
 class CLIPVisionCfg:
@@ -276,7 +279,9 @@ class CLIP(nn.Module):
         x = self.ln_final(x)  # [batch_size, n_ctx, transformer.width]
         x, _ = text_global_pool(x, text, self.text_pool_type)
         if self.text_projection is not None:
-            if isinstance(self.text_projection, nn.Linear):
+            # NOTE: CLIPEX, adding SimplexCustom instance check
+            simplex_instance = isinstance(self.text_projection, SimplexCustom)
+            if isinstance(self.text_projection, nn.Linear) or simplex_instance:
                 x = self.text_projection(x)
             else:
                 x = x @ self.text_projection
@@ -411,14 +416,18 @@ def convert_weights_to_lp(model: nn.Module, dtype=torch.float16):
         if isinstance(l, (CLIP, TextTransformer)):
             # convert text nn.Parameter projections
             attr = getattr(l, "text_projection", None)
-            if attr is not None:
-                attr.data = attr.data.to(dtype)
+            # NOTE: CLIPEX 
+            if not isinstance(attr, SimplexCustom):
+                if attr is not None:
+                    attr.data = attr.data.to(dtype)
 
         if isinstance(l, VisionTransformer):
             # convert vision nn.Parameter projections
             attr = getattr(l, "proj", None)
-            if attr is not None:
-                attr.data = attr.data.to(dtype)
+            # NOTE: CLIPEX
+            if not isinstance(attr, SimplexCustom):
+                if attr is not None :
+                    attr.data = attr.data.to(dtype)
 
     model.apply(_convert_weights)
 
@@ -500,7 +509,9 @@ def build_model_from_openai_state_dict(
     for key in ["input_resolution", "context_length", "vocab_size"]:
         state_dict.pop(key, None)
     convert_weights_to_fp16(model)  # OpenAI state dicts are partially converted to float16
-    model.load_state_dict(state_dict)
+    # NOTE: CLIPEX, strict=False
+    # model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
     return model.eval()
 
 
