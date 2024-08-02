@@ -220,6 +220,5 @@ def build_polytope_model_from_openai_state_dict(
     for key in ["input_resolution", "context_length", "vocab_size"]:
         state_dict.pop(key, None)
     convert_weights_to_fp16(model)  # OpenAI state dicts are partially converted to float16
-    print(state_dict)
     model.load_state_dict(state_dict, strict=False)
     return model.eval()

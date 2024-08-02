@@ -221,8 +221,16 @@ def create_model(
         logging.info(f'Loading pretrained {model_name} from OpenAI.')
         # NOTE: CLIPEX
         if use_polytope:
+            """
             logging.info(f'Loading Polytope model from OpenAI.')
             model = load_openai_polytope_model(
+                model_name,
+                precision=precision,
+                device=device,
+                cache_dir=cache_dir,
+            )
+            """
+            model = load_openai_model(
                 model_name,
                 precision=precision,
                 device=device,
